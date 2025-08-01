@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -36,21 +38,38 @@ func (u User) print() {
 	fmt.Println("user:", u.ID, u.Name, u.Email)
 }
 
-var userStorage []User
-var authenticatedUser *User
+var (
+	userStorage       []User
+	authenticatedUser *User
+	categoryStorage   []Category
+	taskStorage       []Task
+	serializationMode string
+)
 
-var categoryStorage []Category
-var taskStorage []Task
-
-const userStoragePath = "user.txt"
+const (
+	userStoragePath              = "user.txt"
+	JsonSerializationMode        = "json"
+	MandarAvadriSerilizationMode = "mandaravadri"
+)
 
 func main() {
 	fmt.Println("hello to Todo App")
 
 	loadUserStorageFromFile()
 
+	serializeMode := flag.String("serialize-mode", MandarAvadriSerilizationMode, "serialization mode")
+
 	command := flag.String("command", "no command", "command to run")
 	flag.Parse()
+
+	switch *serializeMode {
+	case MandarAvadriSerilizationMode:
+		serializationMode = MandarAvadriSerilizationMode
+
+	default:
+		serializationMode = JsonSerializationMode
+
+	}
 
 	for {
 		runCommand(*command)
@@ -246,6 +265,8 @@ func loadUserStorageFromFile() {
 	_, oErr := file.Read(data)
 	if oErr != nil {
 		fmt.Println("cant read from the file", oErr)
+
+		return
 	}
 
 	var dataStr string = string(data)
@@ -253,47 +274,15 @@ func loadUserStorageFromFile() {
 	userSlice := strings.Split(dataStr, "\n")
 
 	for _, u := range userSlice {
-		if u == " " {
-			continue
-		}
+		userStruct, err := deserilizeFromMandaravadri(u)
 
-		var user = User{}
-
-		userFields := strings.Split(u, ",")
-
-		for _, filed := range userFields {
-			fmt.Println(filed)
-
-			values := strings.Split(filed, ": ")
-
-			if len(values) != 2 {
-				fmt.Println("record is not valid")
-
-				continue
-			}
-
-			fieldName := strings.ReplaceAll(values[0], " ", " ")
-			fieldValue := values[1]
-
-			switch fieldName {
-			case "id":
-				id, err := strconv.Atoi(fieldValue)
-
-				if err != nil {
-					fmt.Println("not valid")
-				}
-				user.ID = id
-			case "name":
-				user.Name = fieldValue
-			case "email":
-				user.Email = fieldValue
-			case "password":
-				user.Password = fieldValue
-
-			}
+		if err != nil {
+			fmt.Println(err)
+			return
 
 		}
-		fmt.Printf("user: %+v\n", user)
+
+		userStorage = append(userStorage,userStruct)
 
 	}
 
@@ -313,11 +302,28 @@ func writeUserToFile(user User) {
 
 	defer file.Close()
 
-	data := fmt.Sprintf("id: %d, name: %s,email: %s,password:%s\n", user.ID, user.Name, user.Email, user.Password)
+	var data []byte
 
-	var b = []byte(data)
+	if serializationMode == MandarAvadriSerilizationMode {
+		data = []byte(fmt.Sprintf("id: %d, name: %s,email: %s,password:%s\n", user.ID, user.Name, user.Email, user.Password))
 
-	numberofWrittenBytes, wErr := file.Write(b)
+	} else if serializationMode == JsonSerializationMode {
+		var jErr error
+		data, jErr = json.Marshal(user)
+
+		if jErr != nil {
+			fmt.Print(jErr)
+
+			return
+		}
+
+	} else {
+		fmt.Println("invalid mode")
+
+		return
+	}
+
+	numberofWrittenBytes, wErr := file.Write(data)
 
 	if wErr != nil {
 		fmt.Println("can not write to the file", wErr)
@@ -327,4 +333,50 @@ func writeUserToFile(user User) {
 
 	fmt.Println("numberofWrittenBytes", numberofWrittenBytes)
 
+}
+
+func deserilizeFromMandaravadri(userStr string) (User, error) {
+	if userStr == " " {
+		return User{}, errors.New("userstr is empty")
+	}
+
+	var user = User{}
+
+	userFields := strings.Split(userStr, ",")
+
+	for _, filed := range userFields {
+		fmt.Println(filed)
+
+		values := strings.Split(filed, ": ")
+
+		if len(values) != 2 {
+			fmt.Println("record is not valid")
+
+			continue
+		}
+
+		fieldName := strings.ReplaceAll(values[0], " ", " ")
+		fieldValue := values[1]
+
+		switch fieldName {
+		case "id":
+			id, err := strconv.Atoi(fieldValue)
+
+			if err != nil {
+
+				return User{}, errors.New("err")
+			}
+			user.ID = id
+		case "name":
+			user.Name = fieldValue
+		case "email":
+			user.Email = fieldValue
+		case "password":
+			user.Password = fieldValue
+
+		}
+
+	}
+
+	return user, nil
 }
