@@ -1,2 +1,0 @@
-id: 1, name: a,email: a,password:a
-id: 2, name: f,email: f,password:f

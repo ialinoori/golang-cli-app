@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Task represents a todo task
@@ -23,10 +24,10 @@ type Task struct {
 
 // User represents a user account
 type User struct {
-	ID       int
-	Email    string
-	Password string
-	Name     string
+	ID            int
+	Email         string
+	HashedPassword string
+	Name          string
 }
 
 // Category represents a task category
@@ -48,8 +49,8 @@ var (
 
 // Constants
 const (
-	userStoragePath          = "users.txt"
-	JsonSerializationMode    = "json"
+	userStoragePath               = "users.txt"
+	JsonSerializationMode         = "json"
 	MandarAvadriSerializationMode = "mandaravadri"
 )
 
@@ -240,11 +241,17 @@ func registerUser() error {
 		return errors.New("password cannot be empty")
 	}
 
+	// Hash the password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %v", err)
+	}
+
 	user := User{
-		ID:       len(userStorage) + 1,
-		Email:    email,
-		Password: password,
-		Name:     name,
+		ID:            len(userStorage) + 1,
+		Email:         email,
+		HashedPassword: string(hashedPassword),
+		Name:          name,
 	}
 
 	userStorage = append(userStorage, user)
@@ -264,10 +271,12 @@ func login() error {
 	password := strings.TrimSpace(scanner.Text())
 
 	for _, user := range userStorage {
-		if user.Email == email && user.Password == password {
-			authenticatedUser = &user
-			fmt.Printf("Login successful! Welcome %s\n", user.Name)
-			return nil
+		if user.Email == email {
+			if err := bcrypt.CompareHashAndPassword([]byte(user.HashedPassword), []byte(password)); err == nil {
+				authenticatedUser = &user
+				fmt.Printf("Login successful! Welcome %s\n", user.Name)
+				return nil
+			}
 		}
 	}
 
@@ -335,8 +344,8 @@ func writeUserToFile(user User) error {
 
 	var data []byte
 	if serializationMode == MandarAvadriSerializationMode {
-		data = []byte(fmt.Sprintf("id: %d, name: %s, email: %s, password: %s\n",
-			user.ID, user.Name, user.Email, user.Password))
+		data = []byte(fmt.Sprintf("id: %d, name: %s, email: %s, hashed_password: %s\n",
+			user.ID, user.Name, user.Email, user.HashedPassword))
 	} else {
 		data, err = json.Marshal(user)
 		if err != nil {
@@ -414,12 +423,12 @@ func deserializeFromMandaravadri(userStr string) (User, error) {
 			user.Name = value
 		case "email":
 			user.Email = value
-		case "password":
-			user.Password = value
+		case "hashed_password":
+			user.HashedPassword = value
 		}
 	}
 
-	if user.Email == "" || user.Name == "" {
+	if user.Email == "" || user.Name == "" || user.HashedPassword == "" {
 		return User{}, errors.New("incomplete user data")
 	}
 	return user, nil
