@@ -194,46 +194,8 @@ func registerUser() {
 
 	userStorage = append(userStorage, user)
 
-	var file *os.File
+	writeUserToFile(user)
 
-	_, err := os.Stat(userStoragePath)
-
-	if err != nil {
-		fmt.Println("path does not exist", err)
-
-		var cErr error
-		file, cErr = os.Create(userStoragePath)
-
-		if cErr != nil {
-			fmt.Println("cant create user.txt file", cErr)
-			return
-		}
-
-	} else {
-		var OErr error
-		file, OErr = os.OpenFile(userStoragePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0777)
-
-		if OErr != nil {
-			fmt.Println("file does not exist", OErr)
-
-			return
-		}
-
-	}
-
-	data := fmt.Sprintf("id: %d, name: %s,email: %s,password:%s\n", user.ID, user.Name, user.Email, user.Password)
-
-	numberofWrittenBytes, wErr := file.Write([]byte(data))
-
-	if wErr != nil {
-		fmt.Println("can not write to the file", wErr)
-
-		return
-	}
-
-	fmt.Println("numberofWrittenBytes", numberofWrittenBytes)
-
-	file.Close()
 }
 func login() {
 	scanner := bufio.NewScanner(os.Stdin)
@@ -304,7 +266,7 @@ func loadUserStorageFromFile() {
 
 			values := strings.Split(filed, ": ")
 
-			if len(values) != 2 { 
+			if len(values) != 2 {
 				fmt.Println("record is not valid")
 
 				continue
@@ -334,5 +296,35 @@ func loadUserStorageFromFile() {
 		fmt.Printf("user: %+v\n", user)
 
 	}
+
+}
+
+func writeUserToFile(user User) {
+
+	var file *os.File
+
+	file, err := os.OpenFile(userStoragePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+
+	if err != nil {
+		fmt.Println("can not create or open file", err)
+
+		return
+	}
+
+	defer file.Close()
+
+	data := fmt.Sprintf("id: %d, name: %s,email: %s,password:%s\n", user.ID, user.Name, user.Email, user.Password)
+
+	var b = []byte(data)
+
+	numberofWrittenBytes, wErr := file.Write(b)
+
+	if wErr != nil {
+		fmt.Println("can not write to the file", wErr)
+
+		return
+	}
+
+	fmt.Println("numberofWrittenBytes", numberofWrittenBytes)
 
 }
